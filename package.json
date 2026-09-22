@@ -1,0 +1,14 @@
+{
+  "name": "crawling-rate",
+  "version": "1.0.0",
+  "description": "Crawler shipping rate seluruh Indonesia dari API Ethos dengan rate limiter dan GitHub Actions",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "test:limiter": "node -e \"import('./src/rateLimiter.js').then(m => console.log('Limiter loaded'))\""
+  },
+  "keywords": ["crawler", "shipping-rate", "ethos", "ratecard"],
+  "author": "",
+  "license": "ISC"
+}

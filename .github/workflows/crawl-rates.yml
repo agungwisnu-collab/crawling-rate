@@ -1,0 +1,157 @@
+name: Crawl Shipping Rates Indonesia
+
+on:
+  workflow_dispatch:
+    inputs:
+      preset:
+        description: 'Pilih Target Provinsi / Perintah'
+        required: true
+        default: 'NEXT'
+        type: choice
+        options:
+          - 'NEXT (1 Provinsi berikutnya yang belum selesai)'
+          - 'ALL (Semua provinsi yang belum selesai sekuensial)'
+          - 'STATUS_LIST (Hanya cetak status & progres data di log)'
+          - 'CUSTOM (Tentukan manual beberapa provinsi di kolom custom_provinces di bawah)'
+          - '11 - Aceh'
+          - '51 - Bali'
+          - '36 - Banten'
+          - '17 - Bengkulu'
+          - '34 - Daerah Istimewa Yogyakarta'
+          - '31 - DKI Jakarta'
+          - '75 - Gorontalo'
+          - '15 - Jambi'
+          - '32 - Jawa Barat'
+          - '33 - Jawa Tengah'
+          - '35 - Jawa Timur'
+          - '61 - Kalimantan Barat'
+          - '63 - Kalimantan Selatan'
+          - '62 - Kalimantan Tengah'
+          - '64 - Kalimantan Timur'
+          - '65 - Kalimantan Utara'
+          - '19 - Kepulauan Bangka Belitung'
+          - '21 - Kepulauan Riau'
+          - '18 - Lampung'
+          - '81 - Maluku'
+          - '82 - Maluku Utara'
+          - '52 - Nusa Tenggara Barat'
+          - '53 - Nusa Tenggara Timur'
+          - '91 - Papua'
+          - '92 - Papua Barat'
+          - '96 - Papua Barat Daya'
+          - '95 - Papua Pegunungan'
+          - '93 - Papua Selatan'
+          - '94 - Papua Tengah'
+          - '14 - Riau'
+          - '76 - Sulawesi Barat'
+          - '73 - Sulawesi Selatan'
+          - '72 - Sulawesi Tengah'
+          - '74 - Sulawesi Tenggara'
+          - '71 - Sulawesi Utara'
+          - '13 - Sumatera Barat'
+          - '16 - Sumatera Selatan'
+          - '12 - Sumatera Utara'
+      custom_provinces:
+        description: 'Jika memilih CUSTOM di atas, masukkan kode/nama dipisah koma (misal: 11, 51, 33)'
+        required: false
+        default: ''
+        type: string
+      rate:
+        description: 'Kecepatan hit API per menit (default: 120)'
+        required: false
+        default: '120'
+        type: string
+      force:
+        description: 'Paksa crawl ulang meskipun data provinsi sudah pernah selesai?'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  crawl:
+    name: Execute Shipping Rate Crawler
+    runs-on: ubuntu-latest
+    timeout-minutes: 350 # Batas maksimal GitHub Actions adalah 360 menit (6 jam)
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Resolve Command & Target
+        id: resolve
+        run: |
+          PRESET="${{ github.event.inputs.preset }}"
+          CUSTOM="${{ github.event.inputs.custom_provinces }}"
+          
+          if [[ "$PRESET" == STATUS_LIST* ]]; then
+            echo "MODE=LIST" >> $GITHUB_ENV
+            echo "Menjalankan mode: STATUS_LIST"
+          elif [[ "$PRESET" == CUSTOM* ]]; then
+            if [ -z "$CUSTOM" ]; then
+              echo "❌ Error: Kolom custom_provinces kosong saat memilih preset CUSTOM!"
+              exit 1
+            fi
+            echo "MODE=CRAWL" >> $GITHUB_ENV
+            echo "PROV_TARGET=$CUSTOM" >> $GITHUB_ENV
+            echo "Menjalankan mode: CUSTOM dengan target: $CUSTOM"
+          elif [[ "$PRESET" == NEXT* ]]; then
+            echo "MODE=CRAWL" >> $GITHUB_ENV
+            echo "PROV_TARGET=NEXT" >> $GITHUB_ENV
+            echo "Menjalankan mode: NEXT"
+          elif [[ "$PRESET" == ALL* ]]; then
+            echo "MODE=CRAWL" >> $GITHUB_ENV
+            echo "PROV_TARGET=ALL" >> $GITHUB_ENV
+            echo "Menjalankan mode: ALL"
+          else
+            # Single province dropdown, ambil kode di awal
+            PROV_CODE=$(echo "$PRESET" | awk '{print $1}')
+            echo "MODE=CRAWL" >> $GITHUB_ENV
+            echo "PROV_TARGET=$PROV_CODE" >> $GITHUB_ENV
+            echo "Menjalankan mode: Single Province ($PROV_CODE)"
+          fi
+
+      - name: Run Crawler or Status
+        env:
+          ETHOS_API_KEY: ${{ secrets.ETHOS_API_KEY }}
+        run: |
+          RATE_VAL="${{ github.event.inputs.rate || '120' }}"
+          
+          if [ "$MODE" = "LIST" ]; then
+            node index.js --list
+          else
+            FORCE_FLAG=""
+            if [ "${{ github.event.inputs.force }}" = "true" ]; then
+              FORCE_FLAG="--force"
+            fi
+            
+            node index.js --prov="$PROV_TARGET" --rate="$RATE_VAL" $FORCE_FLAG
+          fi
+
+      # Commit data hasil crawl (jika ada perubahan file di data/)
+      - name: Commit & Push Progress / Data
+        if: always()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Tarik perubahan terbaru dulu untuk mencegah conflict
+          git pull --rebase origin main || true
+          
+          git add data/
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "chore(data): auto-update shipping rate crawl [skip ci]"
+            git push origin main
+            echo "✅ Data berhasil di-commit dan di-push ke repository."
+          else
+            echo "ℹ️ Tidak ada perubahan data baru untuk di-commit."
+          fi
