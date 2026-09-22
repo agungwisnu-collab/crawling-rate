@@ -1,121 +1,143 @@
 # Crawler Shipping Rates Indonesia (Ethos Ratecard)
 
-Sistem crawler otomatis berbasis Node.js yang mengumpulkan data tarif pengiriman (*shipping rates*) seluruh Indonesia dari API Ethos Ratecard. Dirancang khusus untuk berjalan di **GitHub Actions** (cloud background) sehingga laptop Anda tidak perlu menyala 24 jam nonstop.
+Sistem crawler otomatis berbasis Node.js yang mengumpulkan data tarif pengiriman (*shipping rates*) seluruh Indonesia dari API Ethos Ratecard. Dirancang tangguh dengan sistem *checkpoint per kecamatan*, *auto-heal* data kosong, pembatas kecepatan (*rate limiter*), dan dapat berjalan di **GitHub Actions** (cloud background) tanpa laptop menyala 24 jam nonstop.
 
 ---
 
 ## 🌟 Fitur Utama
 
-1. **Rate Limiter Ketat 70 Req/Menit**:
-   - Menerapkan mekanisme *token bucket sliding-window* dan jeda interval minimal `880 ms` antar request untuk mematuhi rate limit API tanpa lonjakan (*anti-burst*).
+1. **Rate Limiter & Anti-Burst**:
+   - Menerapkan mekanisme *token bucket sliding-window* (default 120 req/menit, jeda minimum 500 ms) untuk mematuhi rate limit API tanpa lonjakan.
 2. **Resilience & Checkpoint per Kecamatan**:
    - Setiap kecamatan yang selesai di-crawl langsung disimpan ke file checkpoint `data/checkpoints/checkpoint-{kode_provinsi}.json`.
    - Jika proses terputus (karena batas waktu runner, cancel, atau koneksi), proses berikutnya akan **otomatis melanjutkan dari kecamatan terakhir** tanpa mengulang dari awal.
-3. **Penyimpanan Lokal Non-Database (Hierarchical JSON)**:
-   - File hasil disimpan per provinsi di `data/rates/{kode}-{nama_provinsi}.json`.
-   - Struktur terstruktur hierarkis: `Kabupaten > Kecamatan > Kelurahan > Rates`.
-4. **Eksekusi di Background via GitHub Actions**:
-   - Dijalankan via menu **Run workflow** di GitHub.
-   - Pilihan target: bisa memilih 1 provinsi tertentu, mode `NEXT` (memproses 1 provinsi berikutnya yang belum selesai), atau mode `ALL`.
+3. **Auto-Heal (Penambalan Data Mandiri)**:
+   - Menyisir dan menambal hanya kelurahan yang memiliki data rates kosong (`rates: []`) akibat gangguan server API sesaat, tanpa perlu mengulang crawling ribuan kelurahan lainnya.
+4. **Penyimpanan Lokal Non-Database (Hierarchical JSON)**:
+   - File hasil disimpan per provinsi di `data/rates/{kode}-{slug}.json`.
+   - Struktur data: `Provinsi > Kabupaten > Kecamatan > Kelurahan > Rates`.
+5. **Eksekusi di Background via GitHub Actions**:
+   - Dijalankan via menu **Run workflow** di GitHub (tersedia menu Single Province, Multiple, Auto-Heal, Status List, dll.).
    - Hasil crawl otomatis di-commit & di-push kembali ke branch repository (`data/rates/`).
-   - Anda cukup menjalankan `git pull` di laptop kapan saja untuk mendapatkan file hasil crawl terbaru.
 
 ---
 
-## 🚀 Cara Menjalankan di GitHub Actions
+## 📖 Daftar Lengkap Command CLI (`node index.js`)
 
-1. **Push Proyek ke Repository GitHub**:
+Semua perintah dijalankan melalui file [index.js](file:///d:/Project/crawling-rate/index.js) di terminal lokal Anda:
+
+### 1. Status & Monitoring Progres
+| Command | Deskripsi |
+| :--- | :--- |
+| `node index.js --list` | Menampilkan tabel status 38 provinsi se-Indonesia, total data kelurahan terkumpul, status checkpoint aktif, dan rincian kabupaten yang sudah selesai tercapture. |
+
+### 2. Crawling Berdasarkan Provinsi
+| Command | Deskripsi |
+| :--- | :--- |
+| `node index.js --prov=51` | Menjalankan crawl untuk 1 provinsi berdasarkan **kode** (contoh: `51` = Bali). |
+| `node index.js --prov="Bali"` | Menjalankan crawl untuk 1 provinsi berdasarkan **nama** (contoh: `"Bali"` atau `"Jawa Tengah"`). |
+| `node index.js --prov="11, 51, 34"` | Menjalankan **beberapa provinsi sekaligus** secara sekuensial (dipisah koma). |
+| `node index.js --prov="Aceh, Bali, Banten"` | Menjalankan beberapa provinsi sekaligus menggunakan nama provinsi. |
+
+### 3. Mode Otomatis (Next & All)
+| Command | Deskripsi |
+| :--- | :--- |
+| `node index.js --next` *(atau `--prov=NEXT`)* | Otomatis mendeteksi dan menjalankan **1 provinsi berikutnya yang belum selesai** (sangat cocok untuk cicil bertahap). |
+| `node index.js --all` *(atau `--prov=ALL`)* | Otomatis menjalankan **seluruh provinsi yang belum selesai** satu per satu sampai tuntas se-Indonesia. |
+
+### 4. Auto-Heal (Pemeriksaan & Penambalan Data Kosong)
+| Command | Deskripsi |
+| :--- | :--- |
+| `node index.js --heal` *(atau `--heal=all`)* | Menyisir seluruh file provinsi di `data/rates/` dan `data/checkpoints/`. Jika ada kelurahan yang datanya kosong (`rates: []`), sistem akan **menambal data kelurahan tersebut saja** ke API tanpa mengulang data yang sudah ada. |
+| `node index.js --heal=51` | Menjalankan auto-heal khusus untuk 1 provinsi tertentu (contoh: Bali). |
+| `node index.js --prov=51 --heal` | Perintah alternatif untuk auto-heal 1 provinsi tertentu. |
+
+### 5. Pengaturan Kecepatan & Jeda (Rate Limit Override)
+| Command | Deskripsi |
+| :--- | :--- |
+| `node index.js --prov=36 --interval=350` | Mengatur jeda minimum antar-request menjadi `350 ms` (default: `500 ms`). |
+| `node index.js --prov=36 --rate=140` | Mengatur kuota request maksimal per menit menjadi `140 req/menit` (default: `120 req/menit`). |
+| `node index.js --prov=36 --rate=140 --interval=350` | Menggabungkan kustomisasi batas rate dan jeda interval secara bersamaan. |
+
+### 6. Filter Pengujian & Penimpaan (Testing Flags)
+| Command | Deskripsi |
+| :--- | :--- |
+| `node index.js --prov=36 --max-kab=1` | Membatasi proses crawling hanya sampai **1 kabupaten** saja (berguna untuk pengujian cepat). Checkpoint tetap aman disimpan. |
+| `node index.js --prov=36 --max-kab=1 --max-kec=1` | Membatasi proses hanya sampai **1 kabupaten dan 1 kecamatan**. |
+| `node index.js --prov=51 --force` | Memaksa crawling ulang dari awal meskipun file provinsi sudah berstatus selesai (`already completed`). |
+
+---
+
+## ☁️ Cara Menjalankan di GitHub Actions (Tanpa Laptop Nyala)
+
+### 1. Setup Awal Repository
+1. Push proyek ke GitHub:
    ```bash
-   git init
-   git add .
-   git commit -m "feat: setup shipping rate crawler with github actions"
    git remote add origin https://github.com/<username>/<repo-name>.git
-   git branch -M main
    git push -u origin main
    ```
-
-2. **Pastikan Izin Write Workflow Aktif**:
-   - Di halaman repository GitHub: Masuk ke **Settings** > **Actions** > **General**.
+2. **Aktifkan Izin Tulis (PENTING)**:
+   - Buka **Settings** > **Actions** > **General**.
    - Pada bagian **Workflow permissions**, pilih: **Read and write permissions**.
    - Klik **Save**.
 
-3. **Jalankan Crawler**:
-   - Masuk ke tab **Actions** di repository GitHub Anda.
-   - Pilih workflow **Crawl Shipping Rates Indonesia**.
-   - Klik tombol **Run workflow**:
-     - Pilih target provinsi dari dropdown (misal: `33 - Jawa Tengah`), atau biarkan `NEXT` untuk memproses otomatis provinsi yang belum selesai.
-     - Klik **Run workflow**.
-   - Anda bisa langsung mematikan laptop! Runner GitHub akan mengeksekusi proses di server cloud, melakukan commit hasil ke branch `main`, dan menyimpannya di folder `data/rates/`.
+### 2. Memilih Opsi di Menu `Run workflow`
+Buka tab **Actions** > pilih **Crawl Shipping Rates Indonesia** > klik tombol **Run workflow**:
 
-4. **Ambil Data ke Laptop**:
-   - Kapan saja Anda menyalakan laptop:
-   ```bash
-   git pull origin main
-   ```
-   File hasil crawl sudah tersedia di folder `data/rates/`.
+* **Opsi Preset Dropdown**:
+  * `NEXT`: Otomatis melanjutkan 1 provinsi berikutnya yang belum selesai.
+  * `ALL`: Menjalankan seluruh provinsi se-Indonesia secara berurutan.
+  * `AUTO_HEAL`: Menyisir seluruh data dan menambal otomatis data rates yang kosong.
+  * `STATUS_LIST`: Hanya mencetak tabel status & progres se-Indonesia di log runner tanpa melakukan crawl.
+  * `CUSTOM`: Mengizinkan input manual beberapa provinsi di kolom bawahnya.
+  * `Daftar Provinsi (11 s.d. 12)`: Memilih langsung 1 provinsi spesifik dari daftar 38 provinsi.
+* **Kolom `custom_provinces`**: Isi dengan kode/nama provinsi dipisah koma (contoh: `11, 51, 34`) jika memilih preset `CUSTOM`.
+* **Kolom `rate`**: Isi kecepatan per menit yang diinginkan (default: `120`).
+* **Checkbox `force`**: Centang jika ingin memaksa crawl ulang provinsi yang sudah selesai.
 
----
-
-## 💻 Cara Menjalankan Manual di Komputer Lokal
-
-Jika sewaktu-waktu ingin menjalankan atau menguji di laptop:
-
-- **Melihat Status 38 Provinsi**:
-  ```bash
-  node index.js --list
-  ```
-
-- **Menjalankan 1 Provinsi Tertentu**:
-  ```bash
-  node index.js --prov=33
-  # atau
-  node index.js --prov="Bali"
-  ```
-
-- **Menjalankan 1 Provinsi Berikutnya yang Belum Selesai (Mode NEXT)**:
-  ```bash
-  node index.js --next
-  ```
-
-- **Uji Coba Cepat (Single Sub-district)**:
-  ```bash
-  node index.js --prov=33 --max-kab=1 --max-kec=1
-  ```
+### 3. Mengambil Hasil Crawl ke Laptop
+Setelah GitHub Actions selesai, Anda cukup menjalankan perintah berikut di terminal laptop:
+```bash
+git pull origin main
+```
+Seluruh file JSON terbaru di folder `data/rates/` akan langsung tersinkronisasi ke laptop Anda.
 
 ---
 
 ## 📂 Struktur Output JSON
 
-File disimpan di `data/rates/{kode}-{slug}.json`:
+File hasil akhir disimpan per provinsi di `data/rates/{kode}-{slug}.json` dengan format:
 ```json
 {
-  "provinsi_kode": "33",
-  "provinsi_nama": "Jawa Tengah",
+  "provinsi_kode": "51",
+  "provinsi_nama": "Bali",
   "warehouse_id": 2,
-  "last_updated": "2026-09-22T04:09:57.342Z",
-  "total_kabupaten": 35,
-  "total_kecamatan": 576,
-  "total_kelurahan": 8562,
+  "last_updated": "2026-09-22T09:15:55.123Z",
+  "total_kabupaten": 9,
+  "total_kecamatan": 57,
+  "total_kelurahan": 716,
   "kabupaten": [
     {
-      "id": "33.07",
-      "nama": "Kabupaten Wonosobo",
+      "id": "51.03",
+      "nama": "Kabupaten Badung",
       "kecamatan": [
         {
-          "id": "33.07.03",
-          "nama": "Sapuran",
+          "id": "51.03.03",
+          "nama": "Abiansemal",
           "kelurahan": [
             {
-              "id": "33.07.03.1008",
-              "nama": "Sapuran [56375]",
+              "id": "51.03.03.2008",
+              "nama": "Abiansemal [80352]",
               "rates": [
                 {
                   "pattern": "JNT - Reguler",
                   "provider_code": "CR_JNT",
                   "provider_name": "JNT",
                   "service_type": "Reguler",
-                  "price": 21000,
-                  "is_cod": true
+                  "price": 27000,
+                  "is_cod": true,
+                  "etd_min": null,
+                  "etd_max": null
                 }
               ]
             }
