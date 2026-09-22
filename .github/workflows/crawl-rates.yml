@@ -62,6 +62,11 @@ on:
         required: false
         default: '120'
         type: string
+      interval:
+        description: 'Jeda minimum antar-hit dalam milidetik (default: 500, misal: 350)'
+        required: false
+        default: '500'
+        type: string
       force:
         description: 'Paksa crawl ulang meskipun data provinsi sudah pernah selesai?'
         required: false
@@ -129,6 +134,7 @@ jobs:
           ETHOS_API_KEY: ${{ secrets.ETHOS_API_KEY }}
         run: |
           RATE_VAL="${{ github.event.inputs.rate || '120' }}"
+          INTERVAL_VAL="${{ github.event.inputs.interval || '500' }}"
           
           if [ "$MODE" = "LIST" ]; then
             node index.js --list
@@ -140,7 +146,7 @@ jobs:
               FORCE_FLAG="--force"
             fi
             
-            node index.js --prov="$PROV_TARGET" --rate="$RATE_VAL" $FORCE_FLAG
+            node index.js --prov="$PROV_TARGET" --rate="$RATE_VAL" --interval="$INTERVAL_VAL" $FORCE_FLAG
           fi
 
       # Commit data hasil crawl (jika ada perubahan file di data/)
