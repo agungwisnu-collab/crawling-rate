@@ -93,17 +93,24 @@ export async function getKelurahan(kecId) {
  * Dibatasi oleh RateLimiter (maks 70 req/menit).
  * @param {string} kelId - Contoh: '33.07.03.1008'
  */
-export async function getShippingRates(kelId) {
-  const response = await postRequest('list', {
-    key: CONFIG.API_KEY,
-    id: kelId,
-    wh: CONFIG.WAREHOUSE_ID
-  }, { useRateLimiter: true });
+export async function getShippingRates(kelId, retries = 2) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const response = await postRequest('list', {
+      key: CONFIG.API_KEY,
+      id: kelId,
+      wh: CONFIG.WAREHOUSE_ID
+    }, { useRateLimiter: true });
 
-  if (response && response.code === 200 && Array.isArray(response.data)) {
-    return response.data;
+    if (response && response.code === 200 && Array.isArray(response.data) && response.data.length > 0) {
+      return response.data;
+    }
+
+    // Jika response kosong atau server mengembalikan error sementara, coba lagi jika masih ada kuota retry
+    if (attempt < retries) {
+      await defaultRateLimiter.sleep(1500);
+    }
   }
 
-  // Jika response tidak sukses atau empty
+  // Jika setelah dicoba ulang memang tetap kosong dari server pusat
   return [];
 }

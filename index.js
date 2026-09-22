@@ -1,5 +1,5 @@
 import { CONFIG } from './src/config.js';
-import { crawlProvince, getIncompleteProvinces, getProvinceProgress } from './src/crawler.js';
+import { crawlProvince, getIncompleteProvinces, getProvinceProgress, healProvince, healAllProvinces } from './src/crawler.js';
 import { defaultRateLimiter } from './src/rateLimiter.js';
 
 function parseArgs() {
@@ -25,6 +25,10 @@ function parseArgs() {
       options.rate = parseInt(arg.split('=')[1], 10);
     } else if (arg.startsWith('--interval=')) {
       options.interval = parseInt(arg.split('=')[1], 10);
+    } else if (arg.startsWith('--heal=')) {
+      options.heal = arg.split('=')[1].trim();
+    } else if (arg === '--heal') {
+      options.heal = 'ALL';
     }
   }
 
@@ -88,6 +92,35 @@ async function main() {
 
   if (options.list) {
     printStatusList();
+    return;
+  }
+
+  // Handle Command --heal (Periksa dan tambal otomatis data kosong)
+  if (options.heal) {
+    const healTarget = options.heal === 'ALL' && options.prov ? options.prov : options.heal;
+
+    if (healTarget.toUpperCase() === 'ALL') {
+      await healAllProvinces(options);
+      return;
+    }
+
+    // Single atau comma-separated provinsi untuk di-heal
+    const tokens = healTarget.split(',').map(t => t.trim()).filter(Boolean);
+    for (const token of tokens) {
+      const codeOrName = token.includes(' - ') ? token.split(' - ')[0].trim() : token;
+      const province = CONFIG.PROVINCES.find(p =>
+        p.code === codeOrName ||
+        p.name.toLowerCase() === codeOrName.toLowerCase() ||
+        p.slug === codeOrName.toLowerCase()
+      );
+
+      if (!province) {
+        console.error(`❌ Provinsi "${token}" tidak ditemukan untuk di-heal.`);
+        continue;
+      }
+
+      await healProvince(province, options);
+    }
     return;
   }
 

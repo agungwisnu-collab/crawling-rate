@@ -338,4 +338,131 @@ export function getIncompleteProvinces() {
   });
 }
 
+/**
+ * Memeriksa dan menambal (auto-heal) kelurahan yang datanya kosong atau terlewat.
+ */
+export async function healProvince(province, options = {}) {
+  ensureDirExists(CONFIG.PATHS.DATA_RATES);
+  ensureDirExists(CONFIG.PATHS.DATA_CHECKPOINTS);
+
+  const finalFile = getFinalOutputPath(province);
+  const cpFile = getCheckpointPath(province.code);
+
+  let targetFile = null;
+  let isCheckpoint = false;
+  let data = null;
+
+  if (fs.existsSync(finalFile)) {
+    targetFile = finalFile;
+    isCheckpoint = false;
+    data = JSON.parse(fs.readFileSync(finalFile, 'utf-8'));
+  } else if (fs.existsSync(cpFile)) {
+    targetFile = cpFile;
+    isCheckpoint = true;
+    data = JSON.parse(fs.readFileSync(cpFile, 'utf-8'));
+  } else {
+    console.log(`[Heal Skip] Belum ada data untuk Provinsi ${province.name} (${province.code}).`);
+    return { status: 'no_data', fixed: 0, empty: 0 };
+  }
+
+  console.log(`\n🩺 Memulai pemeriksaan Auto-Heal untuk Provinsi ${province.name}...`);
+  console.log(`Target file: ${targetFile} ${isCheckpoint ? '(Checkpoint Aktif)' : '(File Final)'}`);
+
+  // Kumpulkan semua kelurahan yang kosong
+  const emptyList = [];
+
+  if (isCheckpoint) {
+    for (const kabId in data.kabupatenData || {}) {
+      const kab = data.kabupatenData[kabId];
+      for (const kecId in kab.kecamatan || {}) {
+        const kec = kab.kecamatan[kecId];
+        for (const kel of kec.kelurahan || []) {
+          if (!kel.rates || kel.rates.length === 0) {
+            emptyList.push(kel);
+          }
+        }
+      }
+    }
+  } else {
+    for (const kab of data.kabupaten || []) {
+      for (const kec of kab.kecamatan || []) {
+        for (const kel of kec.kelurahan || []) {
+          if (!kel.rates || kel.rates.length === 0) {
+            emptyList.push(kel);
+          }
+        }
+      }
+    }
+  }
+
+  if (emptyList.length === 0) {
+    console.log(`✨ Sempurna! Semua kelurahan di Provinsi ${province.name} sudah memiliki data rates lengkap 100%.`);
+    return { status: 'all_valid', fixed: 0, empty: 0 };
+  }
+
+  console.log(`⚠️ Ditemukan ${emptyList.length} kelurahan dengan rates kosong. Memulai penambalan otomatis...`);
+
+  let fixedCount = 0;
+  let remainingEmpty = 0;
+
+  for (let i = 0; i < emptyList.length; i++) {
+    const kel = emptyList[i];
+    try {
+      const rates = await getShippingRates(kel.id, 2);
+      if (rates && rates.length > 0) {
+        kel.rates = rates;
+        fixedCount++;
+        console.log(`   ✔ [${i + 1}/${emptyList.length}] Berhasil ditambal: ${kel.nama} (${rates.length} rates)`);
+      } else {
+        remainingEmpty++;
+        console.log(`   ❌ [${i + 1}/${emptyList.length}] Tetap kosong dari server pusat: ${kel.nama}`);
+      }
+    } catch (err) {
+      remainingEmpty++;
+      console.error(`   ❌ [${i + 1}/${emptyList.length}] Error saat menambal ${kel.nama}: ${err.message}`);
+    }
+  }
+
+  // Simpan kembali data yang sudah ditambal
+  if (isCheckpoint) {
+    saveCheckpoint(province.code, data);
+  } else {
+    data.last_updated = new Date().toISOString();
+    fs.writeFileSync(finalFile, JSON.stringify(data, null, 2), 'utf-8');
+  }
+
+  console.log(`\n🎉 Selesai Auto-Heal untuk Provinsi ${province.name}!`);
+  console.log(`   ✔ Berhasil ditambal : ${fixedCount}`);
+  console.log(`   ❌ Masih kosong     : ${remainingEmpty}`);
+
+  return { status: 'healed', fixed: fixedCount, empty: remainingEmpty };
+}
+
+/**
+ * Menjalankan Auto-Heal untuk seluruh provinsi yang sudah memiliki data / checkpoint.
+ */
+export async function healAllProvinces(options = {}) {
+  console.log('\n🩺 ================= AUTO-HEAL SELURUH PROVINSI =================');
+  let totalFixed = 0;
+  let totalEmpty = 0;
+
+  for (const prov of CONFIG.PROVINCES) {
+    const finalFile = getFinalOutputPath(prov);
+    const cpFile = getCheckpointPath(prov.code);
+
+    if (fs.existsSync(finalFile) || fs.existsSync(cpFile)) {
+      const res = await healProvince(prov, options);
+      totalFixed += (res.fixed || 0);
+      totalEmpty += (res.empty || 0);
+    }
+  }
+
+  console.log('\n================================================================');
+  console.log(`🏁 Rekap Auto-Heal Nasional:`);
+  console.log(`   Total berhasil ditambal : ${totalFixed} kelurahan`);
+  console.log(`   Total masih kosong      : ${totalEmpty} kelurahan`);
+  console.log('================================================================\n');
+}
+
+
 

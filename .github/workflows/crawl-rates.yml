@@ -12,6 +12,7 @@ on:
           - 'NEXT (1 Provinsi berikutnya yang belum selesai)'
           - 'ALL (Semua provinsi yang belum selesai sekuensial)'
           - 'STATUS_LIST (Hanya cetak status & progres data di log)'
+          - 'AUTO_HEAL (Periksa & tambal otomatis seluruh data rates kosong)'
           - 'CUSTOM (Tentukan manual beberapa provinsi di kolom custom_provinces di bawah)'
           - '11 - Aceh'
           - '51 - Bali'
@@ -96,6 +97,9 @@ jobs:
           if [[ "$PRESET" == STATUS_LIST* ]]; then
             echo "MODE=LIST" >> $GITHUB_ENV
             echo "Menjalankan mode: STATUS_LIST"
+          elif [[ "$PRESET" == AUTO_HEAL* ]]; then
+            echo "MODE=HEAL" >> $GITHUB_ENV
+            echo "Menjalankan mode: AUTO_HEAL"
           elif [[ "$PRESET" == CUSTOM* ]]; then
             if [ -z "$CUSTOM" ]; then
               echo "❌ Error: Kolom custom_provinces kosong saat memilih preset CUSTOM!"
@@ -128,6 +132,8 @@ jobs:
           
           if [ "$MODE" = "LIST" ]; then
             node index.js --list
+          elif [ "$MODE" = "HEAL" ]; then
+            node index.js --heal=all
           else
             FORCE_FLAG=""
             if [ "${{ github.event.inputs.force }}" = "true" ]; then
