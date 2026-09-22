@@ -150,12 +150,17 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
-          # Tarik perubahan terbaru dulu untuk mencegah conflict
-          git pull --rebase origin main || true
-          
+          # 1. Stage seluruh perubahan di folder data/
           git add data/
+          
+          # 2. Jika ada perubahan data, commit terlebih dahulu sebelum pull rebase
           if ! git diff-index --quiet HEAD; then
             git commit -m "chore(data): auto-update shipping rate crawl [skip ci]"
+            
+            # 3. Tarik commit terbaru dari remote dan gabungkan di atasnya
+            git pull --rebase --autostash origin main
+            
+            # 4. Push commit ke repository GitHub
             git push origin main
             echo "✅ Data berhasil di-commit dan di-push ke repository."
           else
