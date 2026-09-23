@@ -1,0 +1,104 @@
+name: Auto Crawl All Provinces (Matrix Queue)
+
+on:
+  workflow_dispatch:
+    inputs:
+      interval:
+        description: 'Jeda minimum antar-hit dalam milidetik (default: 100)'
+        required: false
+        default: '100'
+        type: string
+      rate:
+        description: 'Batas hit API per menit (default: 280)'
+        required: false
+        default: '280'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  crawl-queue:
+    name: Crawl Prov ${{ matrix.province }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 350 # Maksimal 6 jam per provinsi
+    strategy:
+      max-parallel: 1 # EKSEKUSI TUNGGAL BERURUTAN (Anti beban API & zero race condition)
+      fail-fast: false # Jika 1 provinsi error, jangan batalkan provinsi berikutnya
+      matrix:
+        province:
+          # 1. Empat Provinsi Berprogres (Akan melanjutkan checkpoint)
+          - "32" # Jawa Barat
+          - "33" # Jawa Tengah
+          - "35" # Jawa Timur
+          - "62" # Kalimantan Tengah
+
+          # 2. Dua Puluh Lima Provinsi Belum Mulai
+          - "63" # Kalimantan Selatan
+          - "64" # Kalimantan Timur
+          - "65" # Kalimantan Utara
+          - "19" # Kepulauan Bangka Belitung
+          - "21" # Kepulauan Riau
+          - "18" # Lampung
+          - "81" # Maluku
+          - "82" # Maluku Utara
+          - "52" # Nusa Tenggara Barat
+          - "53" # Nusa Tenggara Timur
+          - "91" # Papua
+          - "92" # Papua Barat
+          - "96" # Papua Barat Daya
+          - "95" # Papua Pegunungan
+          - "93" # Papua Selatan
+          - "94" # Papua Tengah
+          - "14" # Riau
+          - "76" # Sulawesi Barat
+          - "73" # Sulawesi Selatan
+          - "72" # Sulawesi Tengah
+          - "74" # Sulawesi Tenggara
+          - "71" # Sulawesi Utara
+          - "13" # Sumatera Barat
+          - "16" # Sumatera Selatan
+          - "12" # Sumatera Utara
+
+    steps:
+      - name: Checkout Repository (Latest Main)
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Run Crawler
+        env:
+          BEBASKIRIM_API_KEY: ${{ secrets.BEBASKIRIM_API_KEY }}
+          BEBASKIRIM_TENANT_ID: ${{ secrets.BEBASKIRIM_TENANT_ID }}
+          BEBASKIRIM_APP_ID: ${{ secrets.BEBASKIRIM_APP_ID }}
+          ETHOS_API_KEY: ${{ secrets.ETHOS_API_KEY }}
+        run: |
+          RATE_VAL="${{ github.event.inputs.rate || '280' }}"
+          INTERVAL_VAL="${{ github.event.inputs.interval || '100' }}"
+          
+          echo "🚀 Memulai Antrean Provinsi: ${{ matrix.province }}"
+          node index.js --prov="${{ matrix.province }}" --rate="$RATE_VAL" --interval="$INTERVAL_VAL"
+
+      - name: Commit & Push Progress / Data
+        if: always()
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Stage folder data (rates dan checkpoints)
+          git add data/
+          
+          if ! git diff-index --quiet HEAD; then
+            git commit -m "chore(data): auto-update province ${{ matrix.province }} [skip ci]"
+            git pull --rebase --autostash origin main
+            git push origin main
+            echo "✅ Data Provinsi ${{ matrix.province }} berhasil di-commit dan di-push ke main."
+          else
+            echo "ℹ️ Tidak ada perubahan data baru untuk Provinsi ${{ matrix.province }}."
+          fi
