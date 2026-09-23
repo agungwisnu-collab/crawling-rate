@@ -3,6 +3,7 @@ import path from 'path';
 import { CONFIG } from './config.js';
 import { getKabupaten, getKecamatan, getKelurahan, getShippingRates } from './api.js';
 import { defaultRateLimiter } from './rateLimiter.js';
+import { getProvinceHierarchyFromCsv } from './areaService.js';
 
 /**
  * Memastikan direktori target tersedia.
@@ -105,9 +106,12 @@ export async function crawlProvince(province, options = {}) {
     console.log(`[Resume] Melanjutkan dari checkpoint: ${checkpoint.completedKecamatanIds.length} kecamatan sudah selesai.`);
   }
 
-  // 1. Ambil daftar Kabupaten
-  console.log(`[1/4] Mengambil daftar kabupaten di ${province.name}...`);
-  const fullKabList = await getKabupaten(province.code);
+  // 1. Ambil daftar Kabupaten (Prioritas 1: master_origin.csv offline jika ada, Prioritas 2: API)
+  console.log(`[1/4] Mengambil struktur wilayah di ${province.name}...`);
+  const csvHierarchy = await getProvinceHierarchyFromCsv(province.code);
+  const usingCsv = Boolean(csvHierarchy && csvHierarchy.length > 0);
+
+  const fullKabList = usingCsv ? csvHierarchy : await getKabupaten(province.code);
   if (!fullKabList || fullKabList.length === 0) {
     console.error(`[Error] Tidak ada data kabupaten untuk provinsi ${province.name}`);
     return { status: 'error', message: 'No kabupaten found' };
@@ -119,7 +123,7 @@ export async function crawlProvince(province, options = {}) {
   }
 
   const isPartial = Boolean((options.maxKab && options.maxKab < fullKabList.length) || options.maxKec);
-  console.log(`Ditemukan ${fullKabList.length} kabupaten/kota (Target proses: ${kabList.length} kabupaten).`);
+  console.log(`Ditemukan ${fullKabList.length} kabupaten/kota (Target proses: ${kabList.length} kabupaten) [Sumber: ${usingCsv ? 'master_origin.csv (Offline) ⚡' : 'Area API (Online)'}].`);
 
   let totalKelurahanCrawled = 0;
 
@@ -136,8 +140,8 @@ export async function crawlProvince(province, options = {}) {
       };
     }
 
-    // Ambil daftar Kecamatan
-    let kecList = await getKecamatan(kab.id);
+    // Ambil daftar Kecamatan (Offline dari CSV atau online via API)
+    let kecList = usingCsv ? kab.kecamatan : await getKecamatan(kab.id);
     if (options.maxKec) {
       kecList = kecList.slice(0, options.maxKec);
     }
@@ -156,8 +160,8 @@ export async function crawlProvince(province, options = {}) {
 
       console.log(`   ⏳ [Kecamatan ${kecIdx + 1}/${kecList.length}] ${kec.text} (ID: ${kec.id})...`);
 
-      // Ambil daftar Kelurahan
-      const kelList = await getKelurahan(kec.id);
+      // Ambil daftar Kelurahan (Offline dari CSV atau online via API)
+      const kelList = usingCsv ? kec.kelurahan : await getKelurahan(kec.id);
       const kelurahanResults = [];
 
       for (let kelIdx = 0; kelIdx < kelList.length; kelIdx++) {
@@ -168,11 +172,13 @@ export async function crawlProvince(province, options = {}) {
         kelurahanResults.push({
           id: kel.id,
           nama: kel.text,
-          rates: rates
+          rates: rates,
+          ...(kel.kode_pos ? { kode_pos: kel.kode_pos } : {}),
+          ...(kel.region_id ? { region_id: kel.region_id } : {})
         });
 
         totalKelurahanCrawled++;
-        process.stdout.write(`\r      -> Kelurahan [${kelIdx + 1}/${kelList.length}] ${kel.text.slice(0, 30)} | Rates: ${rates.length} | 1m Req: ${stats.requestsInLastMinute}/${CONFIG.RATE_LIMIT.MAX_REQUESTS_PER_MINUTE}`);
+        process.stdout.write(`\r      -> Kelurahan [${kelIdx + 1}/${kelList.length}] ${kel.text.slice(0, 30)} | Rates: ${rates.length} | 1m Req: ${stats.requestsInLastMinute}/${defaultRateLimiter.maxPerMinute}`);
       }
       process.stdout.write('\n');
 
