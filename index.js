@@ -85,9 +85,19 @@ function printStatusList() {
 async function main() {
   const options = parseArgs();
 
+  const providerName = CONFIG.PROVIDER === 'BEBASKIRIM'
+    ? `BebasKirim Partner API (Origin: ${CONFIG.BEBASKIRIM.ORIGIN_CODE}, Tenant: ${CONFIG.BEBASKIRIM.TENANT_ID.substring(0, 8)}...)`
+    : `Ethos Ratecard (WH: ${CONFIG.WAREHOUSE_ID})`;
+  console.log(`[Provider] Gateway aktif: ${providerName}`);
+
+  const activeRate = options.rate || CONFIG.RATE_LIMIT.MAX_REQUESTS_PER_MINUTE;
+  const activeInterval = options.interval || CONFIG.RATE_LIMIT.MIN_INTERVAL_MS;
+
   if (options.rate || options.interval) {
     defaultRateLimiter.updateConfig(options.rate, options.interval);
-    console.log(`[Config] Rate limiter disetel ke: ${options.rate || CONFIG.RATE_LIMIT.MAX_REQUESTS_PER_MINUTE} req/min (jeda: ${options.interval || CONFIG.RATE_LIMIT.MIN_INTERVAL_MS} ms)`);
+    console.log(`[Config] Rate limiter di-override ke: ${activeRate} req/min (jeda: ${activeInterval} ms)`);
+  } else {
+    console.log(`[Config] Rate limiter default: ${activeRate} req/min (jeda: ${activeInterval} ms)`);
   }
 
   if (options.list) {

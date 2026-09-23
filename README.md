@@ -55,9 +55,10 @@ Semua perintah dijalankan melalui file [index.js](file:///d:/Project/crawling-ra
 ### 5. Pengaturan Kecepatan & Jeda (Rate Limit Override)
 | Command | Deskripsi |
 | :--- | :--- |
-| `node index.js --prov=36 --interval=350` | Mengatur jeda minimum antar-request menjadi `350 ms` (default: `500 ms`). |
-| `node index.js --prov=36 --rate=140` | Mengatur kuota request maksimal per menit menjadi `140 req/menit` (default: `120 req/menit`). |
-| `node index.js --prov=36 --rate=140 --interval=350` | Menggabungkan kustomisasi batas rate dan jeda interval secara bersamaan. |
+| `node index.js --prov=36 --interval=200` | Mengatur jeda minimum antar-request menjadi `200 ms` (default BebasKirim: `220 ms`). |
+| `node index.js --prov=36 --rate=300` | Mengatur kuota request maksimal per menit menjadi `300 req/menit` (default: `280 req/menit`). |
+| `node index.js --prov=36 --rate=1000 --interval=60` | Meng-override kecepatan maksimal hingga `1000 req/menit` (jeda `60 ms`). Jika gateway server mengembalikan `HTTP 429`, crawler otomatis melakukan jeda pintar (*adaptive backoff*). |
+
 
 ### 6. Filter Pengujian & Penimpaan (Testing Flags)
 | Command | Deskripsi |
@@ -92,7 +93,8 @@ Buka tab **Actions** > pilih **Crawl Shipping Rates Indonesia** > klik tombol **
   * `CUSTOM`: Mengizinkan input manual beberapa provinsi di kolom bawahnya.
   * `Daftar Provinsi (11 s.d. 12)`: Memilih langsung 1 provinsi spesifik dari daftar 38 provinsi.
 * **Kolom `custom_provinces`**: Isi dengan kode/nama provinsi dipisah koma (contoh: `11, 51, 34`) jika memilih preset `CUSTOM`.
-* **Kolom `rate`**: Isi kecepatan per menit yang diinginkan (default: `120`).
+* **Kolom `rate`**: Isi kecepatan per menit yang diinginkan (default: `280`, bisa diisi `300` s.d. `1000`).
+* **Kolom `interval`**: Isi jeda minimum antar-request dalam milidetik (default: `220`, misal: `200` atau `60`).
 * **Checkbox `force`**: Centang jika ingin memaksa crawl ulang provinsi yang sudah selesai.
 
 ### 3. Mengambil Hasil Crawl ke Laptop

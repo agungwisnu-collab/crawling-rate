@@ -5,17 +5,60 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const ROOT_DIR = path.resolve(__dirname, '..');
 
+// Auto-load .env.local jika ada di ROOT_DIR
+import fs from 'fs';
+const envLocalPath = path.join(ROOT_DIR, '.env.local');
+if (fs.existsSync(envLocalPath)) {
+  try {
+    const envContent = fs.readFileSync(envLocalPath, 'utf-8');
+    envContent.split('\n').forEach(line => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) return;
+      const [key, ...val] = trimmed.split('=');
+      if (key && val.length) {
+        const k = key.trim();
+        const v = val.join('=').trim();
+        if (!process.env[k]) {
+          process.env[k] = v;
+        }
+      }
+    });
+  } catch (e) {
+    // Ignore error reading .env.local
+  }
+}
+
 export const CONFIG = {
+  // Mode Provider: 'BEBASKIRIM' (default jika ada kredensial) atau 'ETHOS'
+  PROVIDER: process.env.CRAWLER_PROVIDER || (process.env.BEBASKIRIM_API_KEY ? 'BEBASKIRIM' : 'ETHOS'),
+
+  // BebasKirim Partner API Configuration
+  BEBASKIRIM: {
+    BASE_URL: process.env.BEBASKIRIM_BASE_URL || 'https://open.bebaskirim.com/api/partner',
+    API_KEY: process.env.BEBASKIRIM_API_KEY || '',
+    TENANT_ID: process.env.BEBASKIRIM_TENANT_ID || '',
+    APP_ID: process.env.BEBASKIRIM_APP_ID || '',
+    ORIGIN_CODE: process.env.BEBASKIRIM_ORIGIN_CODE || '31.72.06.1002', // Default: Jakarta Utara (Kelapa Gading Barat)
+    WEIGHT: parseInt(process.env.BEBASKIRIM_WEIGHT || '1000', 10), // 1000 gram (1 kg)
+  },
+
+  // Ethos Ratecard Legacy Configuration (Fallback)
   API_BASE: 'https://ratecard.ethos.co.id/ratecardv2',
   API_KEY: process.env.ETHOS_API_KEY || 'c4f6971bdd907dbe11f4beb83754cd6ec0790f151418acaa0cdfae259db65c88',
   WAREHOUSE_ID: 2, // Default ID Warehouse: 2 (Jakarta)
   
-  // Rate Limit: Default dioptimasi ke 120 req/menit (jeda 500ms) berdasarkan hasil uji coba batas atas
+  // Rate Limit: Default dioptimasi untuk BebasKirim (280 req/min, jeda 220ms) atau Ethos (120 req/min)
   RATE_LIMIT: {
-    MAX_REQUESTS_PER_MINUTE: parseInt(process.env.ETHOS_RATE_LIMIT || '120', 10),
-    MIN_INTERVAL_MS: parseInt(process.env.ETHOS_MIN_INTERVAL || '500', 10),
+    MAX_REQUESTS_PER_MINUTE: parseInt(
+      process.env.RATE_LIMIT || process.env.ETHOS_RATE_LIMIT || (process.env.BEBASKIRIM_API_KEY ? '280' : '120'),
+      10
+    ),
+    MIN_INTERVAL_MS: parseInt(
+      process.env.MIN_INTERVAL || process.env.ETHOS_MIN_INTERVAL || (process.env.BEBASKIRIM_API_KEY ? '220' : '500'),
+      10
+    ),
     MAX_RETRIES: 5,
-    INITIAL_RETRY_DELAY_MS: 3000
+    INITIAL_RETRY_DELAY_MS: 2000
   },
 
   PATHS: {

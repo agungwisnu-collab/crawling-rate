@@ -58,14 +58,14 @@ on:
         default: ''
         type: string
       rate:
-        description: 'Kecepatan hit API per menit (default: 120)'
+        description: 'Kecepatan hit API per menit (default: 280, bisa dioverride s/d 1000)'
         required: false
-        default: '120'
+        default: '280'
         type: string
       interval:
-        description: 'Jeda minimum antar-hit dalam milidetik (default: 500, misal: 350)'
+        description: 'Jeda minimum antar-hit dalam milidetik (default: 220)'
         required: false
-        default: '500'
+        default: '220'
         type: string
       force:
         description: 'Paksa crawl ulang meskipun data provinsi sudah pernah selesai?'
@@ -131,10 +131,13 @@ jobs:
 
       - name: Run Crawler or Status
         env:
+          BEBASKIRIM_API_KEY: ${{ secrets.BEBASKIRIM_API_KEY }}
+          BEBASKIRIM_TENANT_ID: ${{ secrets.BEBASKIRIM_TENANT_ID }}
+          BEBASKIRIM_APP_ID: ${{ secrets.BEBASKIRIM_APP_ID }}
           ETHOS_API_KEY: ${{ secrets.ETHOS_API_KEY }}
         run: |
-          RATE_VAL="${{ github.event.inputs.rate || '120' }}"
-          INTERVAL_VAL="${{ github.event.inputs.interval || '500' }}"
+          RATE_VAL="${{ github.event.inputs.rate || '280' }}"
+          INTERVAL_VAL="${{ github.event.inputs.interval || '220' }}"
           
           if [ "$MODE" = "LIST" ]; then
             node index.js --list
