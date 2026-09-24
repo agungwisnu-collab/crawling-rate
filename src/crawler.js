@@ -237,7 +237,7 @@ export async function crawlProvince(province, options = {}) {
     kabupaten: finalKabupatenList
   };
 
-  fs.writeFileSync(finalOutputFile, JSON.stringify(finalOutput, null, 2), 'utf-8');
+  fs.writeFileSync(finalOutputFile, JSON.stringify(finalOutput), 'utf-8');
   console.log(`✅ File berhasil disimpan: ${finalOutputFile}`);
   console.log(`📊 Statistik: ${finalKabupatenList.length} Kabupaten, ${totalKec} Kecamatan, ${totalKel} Kelurahan.`);
 
@@ -434,7 +434,7 @@ export async function healProvince(province, options = {}) {
     saveCheckpoint(province.code, data);
   } else {
     data.last_updated = new Date().toISOString();
-    fs.writeFileSync(finalFile, JSON.stringify(data, null, 2), 'utf-8');
+    fs.writeFileSync(finalFile, JSON.stringify(data), 'utf-8');
   }
 
   console.log(`\n🎉 Selesai Auto-Heal untuk Provinsi ${province.name}!`);
